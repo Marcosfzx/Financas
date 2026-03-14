@@ -1311,7 +1311,8 @@ function openLightbox(txId){
 function closeLightbox(e){if(!e||e.target===document.getElementById('lightbox')||e.currentTarget?.classList.contains('lightbox-close'))document.getElementById('lightbox').classList.remove('open');}
 
 // ── API key ───────────────────────────────────────────────────
-function getApiKey(){return localStorage.getItem(APIKEY_STORAGE)||'';}
+function getApiKey(){return state.anthropicKey||localStorage.getItem(APIKEY_STORAGE)||'';}
+
 
 // ── AI Scan ───────────────────────────────────────────────────
 function triggerScanPhoto(){if(!getApiKey()){openSettings();showToast(t('toast_apikey_missing'));return;}document.getElementById('scanPhotoInput').click();}
@@ -1356,7 +1357,7 @@ async function analyzeReceiptWithAI(b64){
 // ── Settings ──────────────────────────────────────────────────
 function openSettings(){document.getElementById('settingsApiKey').value=getApiKey();document.getElementById('settingsPanel').classList.add('open');document.getElementById('settingsOverlay').classList.add('open');}
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('open');document.getElementById('settingsOverlay').classList.remove('open');}
-function saveSettingsApiKey(){const key=document.getElementById('settingsApiKey').value.trim();if(!key){showToast(t('toast_apikey_missing'));return;}if(!key.startsWith('sk-ant-')){showToast(t('toast_apikey_invalid'));return;}localStorage.setItem(APIKEY_STORAGE,key);showToast(t('toast_apikey'));closeSettings();}
+function saveSettingsApiKey(){const key=document.getElementById('settingsApiKey').value.trim();if(!key){showToast(t('toast_apikey_missing'));return;}if(!key.startsWith('sk-ant-')){showToast(t('toast_apikey_invalid'));return;}localStorage.setItem(APIKEY_STORAGE,key);state.anthropicKey=key;save();showToast(t('toast_apikey'));closeSettings();}
 
 // ── Theme ─────────────────────────────────────────────────────
 function toggleTheme(isLight){document.documentElement.classList.toggle('light',isLight);localStorage.setItem('financa_theme',isLight?'light':'dark');}
@@ -1538,6 +1539,7 @@ async function driveLoadFromCloud(){
       if(!state.goals)state.goals=[];
       if(!state.recurring)state.recurring=[];
       if(!state.budgets)state.budgets={};
+      if(state.anthropicKey)localStorage.setItem(APIKEY_STORAGE,state.anthropicKey);
       save();renderDashboard();
       if(cloudCount>0)showToast('☁ Dados carregados do Drive');
     }
