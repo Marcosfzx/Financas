@@ -6,6 +6,7 @@
 <title>MF Wallet</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root {
   --bg:#0f1117;--bg2:#161920;--bg3:#1e2028;--bg4:#252830;
@@ -1648,9 +1649,7 @@ applyLang();
 updateCatOptions();
 updateRecCatOptions();
 renderDashboard();
-</script>
-<script src="https://accounts.google.com/gsi/client" async></script>
-<script>
+
 // ── Google Drive + Login ──────────────────────────────────────
 const DRIVE_CLIENT_ID='687057960700-e4giuh59ogfhq9complflaqr3fdn2nd6.apps.googleusercontent.com';
 const DRIVE_SCOPES='https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
