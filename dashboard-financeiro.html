@@ -238,6 +238,15 @@ body{min-height:100vh;}
 .drive-info{flex:1;color:var(--text2);}
 .drive-info small{display:block;color:var(--text3);font-size:10px;margin-top:1px;}
 .save-dot.syncing{background:var(--amber);animation:pulse 1s infinite;}
+/* Extrato items */
+.extrato-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius-sm);border:1px solid var(--border);transition:border-color 0.15s;}
+.extrato-item.selected{border-color:var(--green);}
+.extrato-item input[type=checkbox]{width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0;}
+.extrato-item-info{flex:1;}
+.extrato-item-desc{font-size:13px;color:var(--text);font-weight:500;}
+.extrato-item-meta{font-size:11px;color:var(--text3);margin-top:2px;}
+.extrato-item-val{font-size:13px;font-weight:600;flex-shrink:0;}
+.extrato-item-cat{font-size:10px;padding:2px 7px;border-radius:10px;margin-left:6px;}
 /* Login screen */
 .login-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:500;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
 .login-screen.show{display:flex;}
@@ -410,6 +419,11 @@ body{min-height:100vh;}
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <span data-i18n="btn_add_tx">Transação</span>
         </button>
+        <button class="btn-ai" onclick="triggerExtrato()" style="padding:9px 14px">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <span>Importar extrato</span>
+        </button>
+        <input type="file" accept="image/*,application/pdf" id="extratoInput" style="display:none" onchange="handleExtratoUpload(event)">
       </div>
     </div>
     <div class="metrics-grid" id="metrics"></div>
@@ -668,6 +682,39 @@ body{min-height:100vh;}
     <div class="modal-btns">
       <button class="btn-cancel" onclick="document.getElementById('clearModal').classList.remove('open')" data-i18n="btn_cancel">Cancelar</button>
       <button style="flex:2;background:var(--red);border:none;color:#fff;border-radius:var(--radius-sm);padding:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif" onclick="clearAllData()" data-i18n="btn_clear_confirm">Limpar tudo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Extrato modal -->
+<div class="overlay" id="extratoModal">
+  <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="modal-title" style="margin-bottom:0">Importar extrato</div>
+      <button class="settings-close" onclick="closeExtratoModal()">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px" id="extratoSubtitle">Analisando o extrato...</p>
+
+    <!-- Scanning state -->
+    <div class="ai-scanning" id="extratoScanning" style="margin-bottom:16px">
+      <div class="ai-spinner"></div>
+      <span id="extratoScanMsg">Lendo transações do extrato...</span>
+    </div>
+
+    <!-- Results -->
+    <div id="extratoResults" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:12px;color:var(--text3)" id="extratoCount"></span>
+        <div style="display:flex;gap:8px">
+          <button onclick="extratoSelectAll(true)" style="font-size:11px;background:none;border:none;color:var(--blue);cursor:pointer">Selecionar tudo</button>
+          <button onclick="extratoSelectAll(false)" style="font-size:11px;background:none;border:none;color:var(--text3);cursor:pointer">Desmarcar tudo</button>
+        </div>
+      </div>
+      <div id="extratoList" style="display:flex;flex-direction:column;gap:6px;max-height:400px;overflow-y:auto;margin-bottom:16px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-cancel" onclick="closeExtratoModal()" style="flex:1">Cancelar</button>
+        <button class="btn-save" onclick="saveExtratoSelected()" style="flex:2" id="extratoSaveBtn">Salvar selecionados</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1362,12 +1409,157 @@ function saveSettingsApiKey(){const key=document.getElementById('settingsApiKey'
 // ── Theme ─────────────────────────────────────────────────────
 function toggleTheme(isLight){document.documentElement.classList.toggle('light',isLight);localStorage.setItem('financa_theme',isLight?'light':'dark');}
 
+// ── Extrato Import ────────────────────────────────────────────
+let extratoTxs = [];
+
+function triggerExtrato(){
+  if(!getApiKey()){openSettings();showToast(t('toast_apikey_missing'));return;}
+  document.getElementById('extratoInput').click();
+}
+
+function handleExtratoUpload(e){
+  const file = e.target.files[0];
+  if(!file)return;
+  e.target.value='';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      // Scale down for API — extratos podem ser longos
+      const MAX = 1600;
+      let w = img.width, h = img.height;
+      if(w > MAX){h = Math.round(h*MAX/w);w = MAX;}
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      analyzeExtrato(canvas.toDataURL('image/jpeg', 0.88));
+    };
+    img.onerror = () => showToast('Formato não suportado. Use uma imagem.');
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function openExtratoModal(){
+  extratoTxs = [];
+  document.getElementById('extratoScanning').classList.add('show');
+  document.getElementById('extratoResults').style.display = 'none';
+  document.getElementById('extratoSubtitle').textContent = 'Analisando o extrato com IA...';
+  document.getElementById('extratoModal').classList.add('open');
+}
+function closeExtratoModal(){
+  document.getElementById('extratoModal').classList.remove('open');
+  extratoTxs = [];
+}
+
+async function analyzeExtrato(b64){
+  openExtratoModal();
+  const key = getApiKey();
+  const catExpList = (CAT_EXPENSE[lang]||CAT_EXPENSE.pt).join(', ');
+  const catIncList = (CAT_INCOME[lang]||CAT_INCOME.pt).join(', ');
+  const today = new Date().toISOString().slice(0,10);
+  const currentYearMonth = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}`;
+
+  const prompt = `You are a financial assistant. Analyze this bank statement or expense list image and extract ALL transactions visible.
+
+Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation:
+[
+  {"desc":"short description max 5 words","val":0.00,"date":"YYYY-MM-DD","type":"expense or income","cat":"category"},
+  ...
+]
+
+Rules:
+- Extract EVERY transaction you can see
+- For dates: if year is missing use ${currentYear}. If date is missing use ${today}
+- val must be positive decimal number (no currency symbols)
+- type: "income" for deposits/credits/received, "expense" for withdrawals/debits/payments
+- cat must be exactly one of these expenses: ${catExpList}
+- or one of these income: ${catIncList}
+- If you cannot find any transactions respond with empty array: []`;
+
+  try{
+    const imgData = b64.split(',')[1];
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgData}},{type:'text',text:prompt}]}]})
+    });
+    if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`Erro ${res.status}`);}
+    const data = await res.json();
+    const text = (data.content||[]).map(b=>b.text||'').join('').trim();
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    if(!Array.isArray(parsed)||parsed.length===0){
+      document.getElementById('extratoScanning').classList.remove('show');
+      document.getElementById('extratoSubtitle').textContent = 'Nenhuma transação encontrada na imagem.';
+      return;
+    }
+
+    extratoTxs = parsed.map((tx,i) => ({...tx, id:'ext_'+i, selected:true}));
+    renderExtratoList();
+
+  }catch(err){
+    document.getElementById('extratoScanning').classList.remove('show');
+    document.getElementById('extratoSubtitle').textContent = 'Erro ao analisar: '+err.message;
+    console.error(err);
+  }
+}
+
+function renderExtratoList(){
+  document.getElementById('extratoScanning').classList.remove('show');
+  document.getElementById('extratoResults').style.display = 'block';
+  const total = extratoTxs.length;
+  const selected = extratoTxs.filter(t=>t.selected).length;
+  document.getElementById('extratoSubtitle').textContent = `${total} transações encontradas`;
+  document.getElementById('extratoCount').textContent = `${selected} de ${total} selecionadas`;
+  document.getElementById('extratoSaveBtn').textContent = `Salvar ${selected} transação${selected!==1?'s':''}`;
+
+  document.getElementById('extratoList').innerHTML = extratoTxs.map((tx,i) => {
+    const col = CAT_COLORS[tx.cat]||'#7a8090';
+    const icon = CAT_ICONS[tx.cat]||'•';
+    const d = tx.date ? new Date(tx.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    return `<div class="extrato-item${tx.selected?' selected':''}" onclick="extratoToggle(${i})">
+      <input type="checkbox" ${tx.selected?'checked':''} onclick="event.stopPropagation();extratoToggle(${i})">
+      <div class="tx-icon" style="background:${col}22;color:${col};width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${icon}</div>
+      <div class="extrato-item-info">
+        <div class="extrato-item-desc">${tx.desc}</div>
+        <div class="extrato-item-meta">${d} · <span style="background:${col}22;color:${col};padding:1px 6px;border-radius:8px;font-size:10px">${tx.cat}</span></div>
+      </div>
+      <div class="extrato-item-val" style="color:${tx.type==='income'?'var(--green)':'var(--red)'}">${tx.type==='income'?'+':'-'}${fmtBRL(tx.val)}</div>
+    </div>`;
+  }).join('');
+}
+
+function extratoToggle(i){
+  extratoTxs[i].selected = !extratoTxs[i].selected;
+  renderExtratoList();
+}
+
+function extratoSelectAll(val){
+  extratoTxs.forEach(tx => tx.selected = val);
+  renderExtratoList();
+}
+
+function saveExtratoSelected(){
+  const toSave = extratoTxs.filter(tx => tx.selected);
+  if(!toSave.length){showToast('Nenhuma transação selecionada');return;}
+  toSave.forEach(tx => {
+    state.transactions.push({id:genId(), desc:tx.desc, val:tx.val, type:tx.type, cat:tx.cat, date:tx.date, photo:null});
+  });
+  save();
+  closeExtratoModal();
+  renderDashboard();
+  showToast(`✓ ${toSave.length} transação${toSave.length!==1?'s':''} importada${toSave.length!==1?'s':''}!`);
+  if(document.getElementById('view-history').classList.contains('active'))renderHistory();
+}
+
 // ── Keyboard ─────────────────────────────────────────────────
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){closeModal();closeGoalModal();closeRecModal();closeSettings();document.getElementById('clearModal').classList.remove('open');document.getElementById('lightbox').classList.remove('open');}
+  if(e.key==='Escape'){closeModal();closeGoalModal();closeRecModal();closeSettings();closeExtratoModal();document.getElementById('clearModal').classList.remove('open');document.getElementById('lightbox').classList.remove('open');}
   if((e.metaKey||e.ctrlKey)&&e.key==='n'){e.preventDefault();openModal();}
 });
-['modal','clearModal','goalModal','recModal'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===document.getElementById(id)){if(id==='modal')closeModal();else if(id==='goalModal')closeGoalModal();else if(id==='recModal')closeRecModal();else document.getElementById(id).classList.remove('open');}});});
+['modal','clearModal','goalModal','recModal','extratoModal'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===document.getElementById(id)){if(id==='modal')closeModal();else if(id==='goalModal')closeGoalModal();else if(id==='recModal')closeRecModal();else if(id==='extratoModal')closeExtratoModal();else document.getElementById(id).classList.remove('open');}});});
 
 // ── Init ─────────────────────────────────────────────────────
 lang=localStorage.getItem('financa_lang')||'pt';
