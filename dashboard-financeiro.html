@@ -423,8 +423,7 @@ body{min-height:100vh;}
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           <span>Importar extrato</span>
         </button>
-        <input type="file" accept="image/*,application/pdf" id="extratoInput" style="display:none" onchange="handleExtratoUpload(event)">
-      </div>
+        <input type="file" accept="image/*,application/pdf" id="extratoInput" style="display:none" onchange="handleExtratoUpload(event)">      </div>
     </div>
     <div class="metrics-grid" id="metrics"></div>
     <div class="charts-row">
@@ -1422,22 +1421,32 @@ function handleExtratoUpload(e){
   if(!file)return;
   e.target.value='';
   const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      // Scale down for API — extratos podem ser longos
-      const MAX = 1600;
-      let w = img.width, h = img.height;
-      if(w > MAX){h = Math.round(h*MAX/w);w = MAX;}
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      analyzeExtrato(canvas.toDataURL('image/jpeg', 0.88));
+
+  if(file.type === 'application/pdf'){
+    // PDF — send as base64 document directly to Claude
+    reader.onload = ev => {
+      const b64 = ev.target.result.split(',')[1];
+      analyzeExtratoPDF(b64);
     };
-    img.onerror = () => showToast('Formato não suportado. Use uma imagem.');
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+    reader.readAsDataURL(file);
+  } else {
+    // Image — compress first
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        let w = img.width, h = img.height;
+        if(w > MAX){h = Math.round(h*MAX/w);w = MAX;}
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        analyzeExtrato(canvas.toDataURL('image/jpeg', 0.88));
+      };
+      img.onerror = () => showToast('Formato não suportado. Use imagem ou PDF.');
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
 }
 
 function openExtratoModal(){
@@ -1506,7 +1515,65 @@ Rules:
   }
 }
 
-function renderExtratoList(){
+async function analyzeExtratoPDF(b64){
+  openExtratoModal();
+  document.getElementById('extratoScanMsg').textContent = 'Lendo PDF do extrato...';
+  const key = getApiKey();
+  const catExpList = (CAT_EXPENSE[lang]||CAT_EXPENSE.pt).join(', ');
+  const catIncList = (CAT_INCOME[lang]||CAT_INCOME.pt).join(', ');
+  const today = new Date().toISOString().slice(0,10);
+
+  const prompt = `You are a financial assistant. Analyze this bank statement PDF and extract ALL transactions.
+
+Respond ONLY with a valid JSON array, no markdown, no backticks, no explanation:
+[
+  {"desc":"short description max 5 words","val":0.00,"date":"YYYY-MM-DD","type":"expense or income","cat":"category"},
+  ...
+]
+
+Rules:
+- Extract EVERY transaction visible in the document
+- For dates: if year is missing use ${currentYear}. If date is missing use ${today}
+- val must be positive decimal number (no currency symbols)
+- type: "income" for deposits/credits/received, "expense" for withdrawals/debits/payments
+- cat must be exactly one of these expenses: ${catExpList}
+- or one of these income: ${catIncList}
+- If you cannot find any transactions respond with empty array: []`;
+
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        messages:[{role:'user',content:[
+          {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
+          {type:'text',text:prompt}
+        ]}]
+      })
+    });
+    if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`Erro ${res.status}`);}
+    const data = await res.json();
+    const text = (data.content||[]).map(b=>b.text||'').join('').trim();
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    if(!Array.isArray(parsed)||parsed.length===0){
+      document.getElementById('extratoScanning').classList.remove('show');
+      document.getElementById('extratoSubtitle').textContent = 'Nenhuma transação encontrada no PDF.';
+      return;
+    }
+
+    extratoTxs = parsed.map((tx,i) => ({...tx, id:'ext_'+i, selected:true}));
+    renderExtratoList();
+
+  }catch(err){
+    document.getElementById('extratoScanning').classList.remove('show');
+    document.getElementById('extratoSubtitle').textContent = 'Erro ao analisar PDF: '+err.message;
+    console.error(err);
+  }
+}
   document.getElementById('extratoScanning').classList.remove('show');
   document.getElementById('extratoResults').style.display = 'block';
   const total = extratoTxs.length;
