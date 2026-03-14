@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard Financeiro</title>
+<title>MF Wallet</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
@@ -263,8 +263,8 @@ body{min-height:100vh;}
 <!-- Login screen -->
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <div class="login-logo">Finança</div>
-    <div class="login-sub">Dashboard Financeiro Pessoal</div>
+    <div class="login-logo">MF Wallet</div>
+    <div class="login-sub">Seu dinheiro, seu controle</div>
     <button class="btn-google" id="loginBtn" onclick="driveConnect()">
       <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.2 30.3 0 24 0 14.7 0 6.7 5.4 2.8 13.3l7.9 6.1C12.6 13 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 6.9-10 6.9-17z"/><path fill="#FBBC05" d="M10.7 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.4 13.3A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.5 10.6l8.2-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.1 0-11.3-4.1-13.2-9.6l-8.1 6.2C6.6 42.5 14.7 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
       Entrar com Google
@@ -285,8 +285,8 @@ body{min-height:100vh;}
     <button class="btn-logout" onclick="doLogout()" title="Sair">⏻</button>
   </div>
   <div class="sidebar-brand" id="sidebarBrand">
-    <div class="brand-label" id="brandLabel">Finança</div>
-    <div class="brand-sub" id="brandSub">Pessoal</div>
+    <div class="brand-label" id="brandLabel">MF Wallet</div>
+    <div class="brand-sub" id="brandSub">Seu dinheiro</div>
   </div>
   <div class="sidebar-nav">
     <div class="nav-section" data-i18n="menu">Menu</div>
@@ -357,7 +357,7 @@ body{min-height:100vh;}
     <div class="settings-row">
       <label class="settings-label" data-i18n="settings_apikey_label">Chave de API Anthropic</label>
       <input class="settings-input" id="settingsApiKey" type="password" placeholder="sk-ant-...">
-      <div class="settings-hint" data-i18n="settings_apikey_hint">Necessária para escanear notas. Obtenha em <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>. Salva apenas no seu navegador.</div>
+      <div class="settings-hint" data-i18n="settings_apikey_hint">Necessária para escanear notas. Salva no seu Google Drive e sincroniza entre dispositivos.</div>
     </div>
     <button class="btn-settings-save" onclick="saveSettingsApiKey()" data-i18n="settings_save_key">Salvar chave</button>
   </div>
@@ -391,7 +391,7 @@ body{min-height:100vh;}
   </div>
   <div class="settings-section" style="border-bottom:none">
     <div class="settings-section-title">About</div>
-    <div class="settings-hint" style="line-height:1.9">Dashboard Financeiro Pessoal<br>v3.0 — AI-powered<br>Dados salvos localmente</div>
+    <div class="settings-hint" style="line-height:1.9">MF Wallet<br>v3.0 — AI-powered<br>Seu dinheiro, seu controle</div>
   </div>
 </div>
 
@@ -689,7 +689,7 @@ const LANGS = {
     nav_goals:'Metas',nav_budgets:'Orçamentos',nav_recurring:'Recorrências',
     settings_title:'Configurações',settings_appearance:'Aparência',settings_light_mode:'Modo claro',
     settings_language:'Idioma',settings_ai:'Integração com IA',settings_apikey_label:'Chave de API Anthropic',
-    settings_apikey_hint:'Necessária para escanear notas. Salva apenas no seu navegador.',
+    settings_apikey_hint:'Necessária para escanear notas. Salva no seu Google Drive e sincroniza entre dispositivos.',
     settings_save_key:'Salvar chave',settings_data:'Dados',
     settings_export_label:'Exportar todos os dados',settings_export_hint:'Salva um arquivo .json com todas as transações, metas e configurações.',
     settings_export_btn:'⬇ Exportar JSON',settings_import_label:'Importar dados',
@@ -734,14 +734,14 @@ const LANGS = {
     goal_progress:'Progresso',goal_remaining:'Falta',goal_months_left:'meses restantes',
     goal_on_track:'No ritmo certo!',goal_need_more:'Precisa de mais',goal_per_month:'/mês',
     rec_every_month:'Todo mês, dia',
-    brand_label:'Finança',brand_sub:'Pessoal',
+    brand_label:'MF Wallet',brand_sub:'Seu dinheiro',
   },
   en:{
     menu:'Menu',config:'Config',nav_dashboard:'Dashboard',nav_history:'History',nav_annual:'Annual',
     nav_goals:'Goals',nav_budgets:'Budgets',nav_recurring:'Recurring',
     settings_title:'Settings',settings_appearance:'Appearance',settings_light_mode:'Light mode',
     settings_language:'Language',settings_ai:'AI Integration',settings_apikey_label:'Anthropic API Key',
-    settings_apikey_hint:'Required to scan receipts. Stored only in your browser.',
+    settings_apikey_hint:'Required to scan receipts. Saved in your Google Drive and synced across devices.',
     settings_save_key:'Save key',settings_data:'Data',
     settings_export_label:'Export all data',settings_export_hint:'Saves a .json file with all transactions, goals and settings.',
     settings_export_btn:'⬇ Export JSON',settings_import_label:'Import data',
@@ -786,14 +786,14 @@ const LANGS = {
     goal_progress:'Progress',goal_remaining:'Remaining',goal_months_left:'months left',
     goal_on_track:'On track!',goal_need_more:'Need more',goal_per_month:'/month',
     rec_every_month:'Every month, day',
-    brand_label:'Finance',brand_sub:'Personal',
+    brand_label:'MF Wallet',brand_sub:'Your money',
   },
   es:{
     menu:'Menú',config:'Config',nav_dashboard:'Dashboard',nav_history:'Historial',nav_annual:'Anual',
     nav_goals:'Metas',nav_budgets:'Presupuestos',nav_recurring:'Recurrentes',
     settings_title:'Configuración',settings_appearance:'Apariencia',settings_light_mode:'Modo claro',
     settings_language:'Idioma',settings_ai:'Integración IA',settings_apikey_label:'Clave API Anthropic',
-    settings_apikey_hint:'Necesaria para escanear recibos. Guardada solo en tu navegador.',
+    settings_apikey_hint:'Necesaria para escanear recibos. Guardada en tu Google Drive y sincronizada entre dispositivos.',
     settings_save_key:'Guardar clave',settings_data:'Datos',
     settings_export_label:'Exportar todos los datos',settings_export_hint:'Guarda un archivo .json con todas las transacciones, metas y ajustes.',
     settings_export_btn:'⬇ Exportar JSON',settings_import_label:'Importar datos',
@@ -838,7 +838,7 @@ const LANGS = {
     goal_progress:'Progreso',goal_remaining:'Falta',goal_months_left:'meses restantes',
     goal_on_track:'¡Al ritmo correcto!',goal_need_more:'Necesitas más',goal_per_month:'/mes',
     rec_every_month:'Cada mes, día',
-    brand_label:'Finanzas',brand_sub:'Personales',
+    brand_label:'MF Wallet',brand_sub:'Tu dinero',
   }
 };
 
