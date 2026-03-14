@@ -937,7 +937,14 @@ let editId=null,editGoalId=null,editRecId=null,currentPhotoB64=null;
 let barChartInst=null,donutChartInst=null,annIncInst=null,annExpInst=null;
 
 // ── Storage ───────────────────────────────────────────────────
-function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));flashSave();}
+function save(){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  flashSave();
+  if(typeof driveToken !== 'undefined' && driveToken){
+    clearTimeout(driveSyncTimer);
+    driveSyncTimer=setTimeout(driveSaveToCloud,1500);
+  }
+}
 function load(){
   const raw=localStorage.getItem(STORAGE_KEY);
   if(raw){try{state=JSON.parse(raw);}catch(e){}}
@@ -1804,14 +1811,6 @@ async function driveLoadFromCloud(){
     }
     driveUISynced();
   }catch(e){driveUISynced();console.error(e);}
-}
-
-// Override save() to also sync
-const _origSave=save;
-function save(){
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  flashSave();
-  if(driveToken){clearTimeout(driveSyncTimer);driveSyncTimer=setTimeout(driveSaveToCloud,1500);}
 }
 
 window.addEventListener('load',()=>setTimeout(driveInit,600));
