@@ -424,7 +424,12 @@ body{min-height:100vh;}
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           <span>Importar extrato</span>
         </button>
-        <input type="file" accept="image/*,application/pdf" id="extratoInput" style="display:none" onchange="handleExtratoUpload(event)">      </div>
+        <button class="btn-ai" onclick="triggerCSV()" style="padding:9px 14px;background:linear-gradient(135deg,#27c98f,#1D9E75)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 1h7l3 3v9H2V1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9 1v3h3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 7h6M4 9.5h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <span>CSV / OFX</span>
+        </button>
+        <input type="file" accept="image/*,application/pdf" id="extratoInput" style="display:none" onchange="handleExtratoUpload(event)">
+        <input type="file" accept=".csv,.ofx,.txt" id="csvInput" style="display:none" onchange="handleCSVUpload(event)">
     </div>
     <div class="metrics-grid" id="metrics"></div>
     <div class="charts-row">
@@ -1631,6 +1636,207 @@ function saveExtratoSelected(){
   renderDashboard();
   showToast(`✓ ${toSave.length} transação${toSave.length!==1?'s':''} importada${toSave.length!==1?'s':''}!`);
   if(document.getElementById('view-history').classList.contains('active'))renderHistory();
+}
+
+// ── CSV / OFX Import ─────────────────────────────────────────
+function triggerCSV(){
+  document.getElementById('csvInput').click();
+}
+
+function handleCSVUpload(e){
+  const file = e.target.files[0];
+  if(!file)return;
+  e.target.value='';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text = ev.target.result;
+    const ext = file.name.split('.').pop().toLowerCase();
+    let txs = [];
+    if(ext === 'ofx' || text.includes('<OFX>') || text.includes('<ofx>')){
+      txs = parseOFX(text);
+    } else {
+      txs = parseCSV(text);
+    }
+    if(!txs.length){
+      showToast('Nenhuma transação encontrada no arquivo.');
+      return;
+    }
+    extratoTxs = txs.map((tx,i) => ({...tx, id:'csv_'+i, selected:true}));
+    openExtratoModal();
+    document.getElementById('extratoScanning').classList.remove('show');
+    document.getElementById('extratoSubtitle').textContent = `Arquivo: ${file.name}`;
+    renderExtratoList();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSV(text){
+  // Normalize line endings
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
+  if(lines.length < 2) return [];
+
+  // Try to detect separator
+  const sep = lines[0].includes(';') ? ';' : ',';
+
+  // Parse header
+  const header = lines[0].split(sep).map(h => h.replace(/"/g,'').trim().toLowerCase());
+
+  // Common column name mappings
+  const findCol = (names) => {
+    for(const n of names){
+      const idx = header.findIndex(h => h.includes(n));
+      if(idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  const dateIdx  = findCol(['data','date','dt','fecha']);
+  const descIdx  = findCol(['descrição','descricao','desc','historico','histórico','memo','description','lancamento','lançamento','detalhe']);
+  const valIdx   = findCol(['valor','value','amount','quantia','debito','crédito','credito','debit','credit','montante']);
+  const typeIdx  = findCol(['tipo','type','natureza','dc','debcred','entrada/saida']);
+  const valInIdx = findCol(['entrada','credit','crédito','credito','receita']);
+  const valOutIdx= findCol(['saída','saida','debit','débito','debito','despesa']);
+
+  const txs = [];
+
+  for(let i = 1; i < lines.length; i++){
+    const line = lines[i].trim();
+    if(!line) continue;
+
+    // Split respecting quoted fields
+    const cols = splitCSVLine(line, sep);
+    if(cols.length < 2) continue;
+
+    // Date
+    let date = dateIdx >= 0 ? cols[dateIdx]?.replace(/"/g,'').trim() : '';
+    date = normalizeDate(date);
+    if(!date) date = new Date().toISOString().slice(0,10);
+
+    // Description
+    let desc = descIdx >= 0 ? cols[descIdx]?.replace(/"/g,'').trim() : cols[0]?.replace(/"/g,'').trim();
+    if(!desc || desc.length < 2) continue;
+    desc = desc.slice(0,50);
+
+    // Value
+    let val = 0;
+    let type = 'expense';
+
+    if(valInIdx >= 0 && valOutIdx >= 0){
+      // Separate income/expense columns
+      const inVal  = parseBRLNumber(cols[valInIdx]||'');
+      const outVal = parseBRLNumber(cols[valOutIdx]||'');
+      if(inVal > 0){ val = inVal; type = 'income'; }
+      else if(outVal > 0){ val = outVal; type = 'expense'; }
+      else continue;
+    } else if(valIdx >= 0){
+      const raw = cols[valIdx]?.replace(/"/g,'').trim() || '';
+      val = parseBRLNumber(raw);
+      if(val === 0) continue;
+      // Negative = expense, positive = income
+      if(val < 0){ type = 'expense'; val = Math.abs(val); }
+      else { type = 'income'; }
+    } else continue;
+
+    // Type override from type column
+    if(typeIdx >= 0){
+      const t = (cols[typeIdx]||'').toLowerCase();
+      if(t.includes('d') || t.includes('saida') || t.includes('saída') || t.includes('deb')) type = 'expense';
+      if(t.includes('c') || t.includes('entrada') || t.includes('cred')) type = 'income';
+    }
+
+    const cat = guessCategory(desc, type);
+    txs.push({desc, val, date, type, cat});
+  }
+  return txs;
+}
+
+function parseOFX(text){
+  const txs = [];
+  const stmtTrn = text.match(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi) || [];
+  stmtTrn.forEach(block => {
+    const get = (tag) => {
+      const m = block.match(new RegExp(`<${tag}>([^<\n\r]+)`, 'i'));
+      return m ? m[1].trim() : '';
+    };
+    const trntype = get('TRNTYPE');
+    const dtposted = get('DTPOSTED');
+    const trnamt = get('TRNAMT');
+    const memo = get('MEMO') || get('NAME') || '';
+    if(!trnamt || !memo) return;
+    const val = Math.abs(parseFloat(trnamt.replace(',','.')));
+    if(!val) return;
+    const type = parseFloat(trnamt) < 0 ? 'expense' : 'income';
+    let date = dtposted.slice(0,8);
+    if(date.length === 8) date = `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`;
+    else date = new Date().toISOString().slice(0,10);
+    const cat = guessCategory(memo, type);
+    txs.push({desc: memo.slice(0,50), val, date, type, cat});
+  });
+  return txs;
+}
+
+function splitCSVLine(line, sep){
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(ch === '"') { inQuotes = !inQuotes; }
+    else if(ch === sep && !inQuotes){ result.push(cur); cur = ''; }
+    else { cur += ch; }
+  }
+  result.push(cur);
+  return result;
+}
+
+function parseBRLNumber(str){
+  if(!str) return 0;
+  str = str.replace(/"/g,'').trim();
+  // Handle BRL format: 1.234,56 or 1,234.56 or 1234.56
+  if(str.includes(',') && str.includes('.')){
+    // Figure out which is decimal separator
+    const lastComma = str.lastIndexOf(',');
+    const lastDot   = str.lastIndexOf('.');
+    if(lastComma > lastDot){ str = str.replace(/\./g,'').replace(',','.'); }
+    else { str = str.replace(/,/g,''); }
+  } else if(str.includes(',')){ str = str.replace(',','.'); }
+  return parseFloat(str) || 0;
+}
+
+function normalizeDate(str){
+  if(!str) return '';
+  str = str.trim().replace(/"/g,'');
+  // DD/MM/YYYY or DD-MM-YYYY
+  let m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // YYYY-MM-DD
+  m = str.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // YYYYMMDD
+  m = str.match(/^(\d{4})(\d{2})(\d{2})/);
+  if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return '';
+}
+
+function guessCategory(desc, type){
+  const d = desc.toLowerCase();
+  const cats = (type==='income' ? CAT_INCOME : CAT_EXPENSE)[lang] || (type==='income' ? CAT_INCOME : CAT_EXPENSE).pt;
+  if(type==='income'){
+    if(d.match(/salário|salario|salary|folha|pagamento|pag\.|payroll/)) return cats.find(c=>c.match(/salário|salary|salario/i))||cats[0];
+    if(d.match(/freelance|freela|pgto serv/)) return cats.find(c=>c.match(/freelance/i))||cats[1];
+    if(d.match(/invest|rendimento|cdb|lci|fundo|tesouro/)) return cats.find(c=>c.match(/invest/i))||cats[2];
+    if(d.match(/aluguel|rent/)) return cats.find(c=>c.match(/aluguel|rent/i))||cats[3];
+    return cats[cats.length-1];
+  }
+  if(d.match(/mercado|superm|ifood|rappi|uber eats|delivery|alimenta|restaur|lanche|padaria|açougue|hortifruti/)) return cats.find(c=>c.match(/aliment|food|comida/i))||cats[0];
+  if(d.match(/uber|99|taxi|combustiv|posto|gasolina|metrô|onibus|ônibus|transporte|estacion/)) return cats.find(c=>c.match(/transp/i))||cats[1];
+  if(d.match(/aluguel|condomin|iptu|luz|energia|água|agua|gas|gás|internet|telefone|celular/)) return cats.find(c=>c.match(/morad|hous|vivien/i))||cats[2];
+  if(d.match(/netflix|spotify|amazon|disney|cinema|teatro|show|ingresso|lazer|viagem|hotel/)) return cats.find(c=>c.match(/lazer|leisure|ocio/i))||cats[3];
+  if(d.match(/farmácia|farmacia|drogasil|ultrafarma|hospital|médico|medico|consulta|exame|saúde|plano/)) return cats.find(c=>c.match(/saúde|health|salud/i))||cats[4];
+  if(d.match(/escola|faculdade|curso|mensalidadecurso|livro|educação|educacao/)) return cats.find(c=>c.match(/educ/i))||cats[5];
+  if(d.match(/roupa|calçado|calcado|zara|renner|riachuelo|c&a|lojas/)) return cats.find(c=>c.match(/vestu|cloth|ropa/i))||cats[6];
+  if(d.match(/spotify|netflix|amazon|apple|google|microsoft|assinatura/)) return cats.find(c=>c.match(/assin|subscr|suscr/i))||cats[7];
+  return cats[cats.length-1];
 }
 
 // ── Keyboard ─────────────────────────────────────────────────
